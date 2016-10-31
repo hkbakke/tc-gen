@@ -13,7 +13,7 @@ Run tc-gen.sh without parameters to see more details.
     Shape egress to 5 mbit/s and ingress to 10 mbit/s using IFB-interface
         tc-gen.sh -i eth0 -u 5 -d 10 -f ifb0
 
-    Shape egress to 20 mbit/s and police ingress to 2 mbit/s
+    Shape egress to 2 mbit/s and police ingress to 20 mbit/s
         tc-gen.sh -i eth0 -u 2 -d 20
 
     Display current configuration
@@ -29,7 +29,8 @@ Run tc-gen.sh without parameters to see more details.
         post-up /usr/local/bin/tc-gen.sh -i ${IFACE} -u 10 -d 100 -f ifb0
 
     # More advanced example with an additional tc filter exclude for
-    # UDP-encapsulated IPsec ESP-traffic to avoid double counting IPsec data
+    # UDP-encapsulated IPsec ESP-traffic to avoid double counting IPsec data on
+    # ingress
     allow-auto bond0.12
     iface bond0.12 inet dhcp
         post-up /usr/local/bin/tc-gen.sh -i ${IFACE} -u 10 -d 100 -f ifb0

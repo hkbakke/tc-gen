@@ -65,7 +65,7 @@ EXAMPLES OF COMMON USE
     Shape egress to 5 mbit/s and ingress to 10 mbit/s using IFB-interface
         tc-gen.sh -i eth0 -u 5 -d 10 -f ifb0
 
-    Shape egress to 20 mbit/s and police ingress to 2 mbit/s
+    Shape egress to 2 mbit/s and police ingress to 20 mbit/s
         tc-gen.sh -i eth0 -u 2 -d 20
 
     Display current configuration
