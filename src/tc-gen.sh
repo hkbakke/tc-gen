@@ -192,6 +192,37 @@ clear_all () {
     ${ETHTOOL} --offload ${IF_NAME} gro on tso on gso on
 }
 
+get_ifb_if () {
+    local IF_NAME="$1"
+    local REGEX="\(Egress Redirect to device ([a-zA-Z0-9]+)\)"
+
+    if [[ $(${TC} -s -d filter show dev ${IF_NAME} parent ffff:) =~ $REGEX ]]
+    then
+        echo "${BASH_REMATCH[1]}"
+    fi
+}
+
+print_config () {
+    local IF_NAME="$1"
+
+    echo -e "### INTERFACE: ${IF_NAME} ###\n"
+    echo "=== Filters ==="
+    ${TC} -s -d filter show dev ${IF_NAME}
+    ${TC} -s -d filter show dev ${IF_NAME} parent ffff:
+
+    echo -e "\n=== Classes ==="
+    ${TC} -s -d class show dev ${IF_NAME}
+
+    echo -e "\n=== Qdiscs ==="
+    ${TC} -s -d qdisc show dev ${IF_NAME}
+    echo ""
+
+    local IFB=$(get_ifb_if ${IF_NAME})
+    if [[ -n ${IFB} ]]; then
+        print_config ${IFB}
+    fi
+}
+
 apply_egress_shaping () {
     # tso and probably gso on the outgoing interface makes the shaping
     # inaccurate in my tests. It is not unusable with these on but the CPU
@@ -372,15 +403,7 @@ if [[ -n ${CLEAR_CONFIG} ]]; then
 fi
 
 if [[ -z ${UP_RATE} && -z ${DOWN_RATE} ]]; then
-    echo "=== Filters ==="
-    ${TC} -s -d filter show dev ${IF_NAME}
-    ${TC} -s -d filter show dev ${IF_NAME} parent ffff:
-
-    echo -e "\n=== Classes ==="
-    ${TC} -s -d class show dev ${IF_NAME}
-
-    echo -e "\n=== Qdiscs ==="
-    ${TC} -s -d qdisc show dev ${IF_NAME}
+    print_config "${IF_NAME}"
     exit
 fi
 
