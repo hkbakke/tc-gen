@@ -1,7 +1,7 @@
 # tc-gen
 tc-gen is a wrapper around all the complexity of modern traffic shaping and
 policing on linux. It tries to use best practices whenever possible while still
-being generic and easy to use. The script is is using HTB with fq_codel to do
+being generic and easy to use. The script is using HTB with fq_codel to do
 the heavy lifting.
 
 Run tc-gen.sh without parameters to see more details.

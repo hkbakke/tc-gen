@@ -32,7 +32,7 @@ OPTIONS
     -d DOWN_RATE_MBITS
     -f IFB_IF_NAME
         If ingress shaping should be used instead of policing define a valid
-        ifb interface. Normally ifb0 and ifb1 is available if nothing is
+        ifb interface. Normally ifb0 and ifb1 are available if nothing is
         configured beyond loading the ifb kernel module.
     -b BURST_SIZE
         Only used when ingress policing is used. For ingress shaping this is
@@ -389,7 +389,7 @@ fi
 
 if [[ -z ${UP_RATE} && -z ${DOWN_RATE} ]]; then
     print_config "${IF_NAME}"
-    exit
+    exit 0
 fi
 
 clear_all
