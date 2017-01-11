@@ -7,20 +7,21 @@ the heavy lifting.
 Run tc-gen.sh without parameters to see more details.
 
 ## Examples of common use
-    Shape egress to 25 mbit/s
-        tc-gen.sh -i eth0 -u 25
+Shape egress to 25 mbit/s
+    
+    tc-gen.sh -i eth0 -u 25
+Shape egress to 5 mbit/s and ingress to 10 mbit/s using IFB-interface
 
-    Shape egress to 5 mbit/s and ingress to 10 mbit/s using IFB-interface
-        tc-gen.sh -i eth0 -u 5 -d 10 -f ifb0
-
-    Shape egress to 2 mbit/s and police ingress to 20 mbit/s
-        tc-gen.sh -i eth0 -u 2 -d 20
-
-    Display current configuration
-        tc-gen.sh -i eth0
-
-    Remove configuration
-        tc-gen.sh -i eth0 -x
+    tc-gen.sh -i eth0 -u 5 -d 10 -f ifb0
+Shape egress to 2 mbit/s and police ingress to 20 mbit/s
+    
+    tc-gen.sh -i eth0 -u 2 -d 20
+Display current configuration
+    
+    tc-gen.sh -i eth0
+Remove configuration
+    
+    tc-gen.sh -i eth0 -x
 
 ## /etc/network/interfaces examples
     # Simple DHCP WAN config
