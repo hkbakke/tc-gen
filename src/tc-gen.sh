@@ -1,6 +1,7 @@
 #!/bin/bash
 
 
+VERSION="1.1.0"
 TC=$(which tc)
 ETHTOOL=$(which ethtool)
 IP=$(which ip)
@@ -57,6 +58,8 @@ OPTIONS
         a ceil of 70 mbit/s and a priority of 2.
     -x
         Clear all traffic control config on interface.
+    -V
+        Print version and exit.
 
 EXAMPLES OF COMMON USE
     Shape egress to 25 mbit/s
@@ -116,6 +119,10 @@ EXCLUDE TRAFFIC FROM INGRESS FILTERING
     interface if the tunnels are terminated locally, resulting in double
     counting of the traffic.
 EOF
+}
+
+print_version () {
+    echo "tc-gen.sh v${VERSION}"
 }
 
 get_htb_quantum () {
@@ -357,7 +364,7 @@ apply_ingress_policing () {
 
 
 # All rates should be given in mbit/s
-while getopts ":i:u:d:b:f:q:c:x" OPT; do
+while getopts ":i:u:d:b:f:q:c:xV" OPT; do
     case $OPT in
         i)
             IF_NAME="${OPTARG}"
@@ -379,6 +386,10 @@ while getopts ":i:u:d:b:f:q:c:x" OPT; do
             ;;
         x)
             CLEAR_CONFIG=1
+            ;;
+        V)
+            print_version
+            exit 0
             ;;
         \?)
             print_usage
