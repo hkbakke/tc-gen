@@ -158,6 +158,17 @@ get_fq_codel_quantum () {
     fi
 }
 
+get_ecn () {
+    # Takes input rate in mbit/s as parameter
+    local RATE=$1
+
+    if [[ ${RATE} -gt 3 ]]; then
+        echo "ecn"
+    else
+        echo "noecn"
+    fi
+}
+
 get_mtu () {
     # Takes interface as parameter
     cat /sys/class/net/${1}/mtu
@@ -266,7 +277,7 @@ apply_egress_shaping () {
                 limit $(get_limit ${CEIL_RATE}) \
                 target $(get_target ${CEIL_RATE} $(get_mtu ${IF_NAME})) \
                 $(get_fq_codel_quantum ${CEIL_RATE}) \
-                noecn
+                $(get_ecn ${CEIL_RATE})
 
             ${TC} filter add dev ${IF_NAME} parent 1: protocol all \
                 handle ${FWMARK} fw classid 1:${CLASS_ID}
@@ -278,12 +289,12 @@ apply_egress_shaping () {
         ceil ${UP_RATE}mbit prio ${DEFAULT_PRIO} \
         quantum $(get_htb_quantum ${UP_RATE})
 
-    # Set qdisc to fq_codel. Disabling ECN is recommended for egress
+    # Set qdisc to fq_codel
     ${TC} qdisc replace dev ${IF_NAME} parent 1:99 handle 99: fq_codel \
         limit $(get_limit ${UP_RATE}) \
         target $(get_target ${UP_RATE} $(get_mtu ${IF_NAME})) \
         $(get_fq_codel_quantum ${UP_RATE}) \
-        noecn
+        $(get_ecn ${UP_RATE})
 }
 
 apply_ingress_shaping () {
