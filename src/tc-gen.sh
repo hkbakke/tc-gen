@@ -169,7 +169,7 @@ get_ecn () {
     # Takes input rate in mbit/s as parameter
     local RATE=$1
 
-    if [[ ${RATE} -gt 3 ]]; then
+    if [[ ${RATE} -ge 4 ]]; then
         echo "ecn"
     else
         echo "noecn"
