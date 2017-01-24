@@ -365,7 +365,7 @@ apply_ingress_policing () {
 
 # All rates should be given in mbit/s
 while getopts ":i:u:d:b:f:q:c:xV" OPT; do
-    case $OPT in
+    case ${OPT} in
         i)
             IF_NAME="${OPTARG}"
             ;;
@@ -391,7 +391,7 @@ while getopts ":i:u:d:b:f:q:c:xV" OPT; do
             print_version
             exit 0
             ;;
-        \?)
+        *)
             print_usage
             exit 1
             ;;
