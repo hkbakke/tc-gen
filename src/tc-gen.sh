@@ -181,6 +181,17 @@ get_mtu () {
     cat /sys/class/net/${1}/mtu
 }
 
+get_tx_offloads () {
+    # Takes rate in mbit/s as parameter
+    local RATE=$1
+
+    if [[ ${RATE} -lt 40 ]]; then
+        echo "tso off gso off"
+    else
+        echo "tso on gso on"
+    fi
+}
+
 get_limit () {
     # Takes rate in mbit/s as parameter
     local RATE=$1
@@ -227,10 +238,8 @@ print_config () {
 }
 
 apply_egress_shaping () {
-    # tso and probably gso on the outgoing interface makes the shaping
-    # inaccurate in my tests. It is not unusable with these on but the CPU
-    # hit is minimal in my tests and it makes the shaping much more accurate.
-    ${ETHTOOL} --offload ${IF_NAME} tso off gso off
+    # Disable tso and gso for lower bandwiths
+    ${ETHTOOL} --offload ${IF_NAME} $(get_tx_offloads ${UP_RATE})
 
     # Add root handle and set default leaf
     ${TC} qdisc add dev ${IF_NAME} root handle 1: htb default 99
