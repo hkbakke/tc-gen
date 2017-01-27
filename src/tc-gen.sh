@@ -128,12 +128,10 @@ print_version () {
 get_htb_quantum () {
     # Takes input rate in mbit/s as parameter
     local RATE=$1
-    local QUANTUM
+    local QUANTUM=8000
 
     if [[ ${RATE} -lt 40 ]]; then
         QUANTUM=1514
-    else
-        QUANTUM=8000
     fi
 
     echo ${QUANTUM}
@@ -145,12 +143,10 @@ get_target () {
     local MTU=$2
     local KBYTES=$(( ${RATE} * 1000 / 8 ))
     local MS=$(( ${MTU} / ${KBYTES} ))
-    local TARGET
+    local TARGET=5
 
     if [[ ${MS} -gt 5 ]]; then
         TARGET=$(( ${MS} + 1 ))
-    else
-        TARGET=5
     fi
 
     echo "${TARGET}.0ms"
@@ -195,7 +191,7 @@ get_tx_offloads () {
 get_limit () {
     # Takes rate in mbit/s as parameter
     local RATE=$1
-    local LIMIT
+    local LIMIT=10000
 
     if [[ ${RATE} -le 10 ]]; then
         LIMIT=600
@@ -203,8 +199,6 @@ get_limit () {
         LIMIT=800
     elif [[ ${RATE} -le 1000 ]]; then
         LIMIT=1200
-    else
-        LIMIT=10000
     fi
 
     echo ${LIMIT}
@@ -245,7 +239,9 @@ apply_egress_shaping () {
     ${TC} qdisc add dev ${IF_NAME} root handle 1: htb default 99
 
     # Set the overall shaped rate of the interface
-    ${TC} class add dev ${IF_NAME} parent 1: classid 1:1 htb rate ${UP_RATE}mbit
+    ${TC} class add dev ${IF_NAME} parent 1: classid 1:1 htb \
+        rate ${UP_RATE}mbit \
+        quantum $(get_htb_quantum ${UP_RATE})
 
     local DEFAULT_RATE=${UP_RATE}
     local DEFAULT_PRIO=4
