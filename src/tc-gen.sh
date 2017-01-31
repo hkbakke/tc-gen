@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-VERSION="1.1.3"
+VERSION="1.1.4"
 TC=$(which tc)
 ETHTOOL=$(which ethtool)
 IP=$(which ip)
