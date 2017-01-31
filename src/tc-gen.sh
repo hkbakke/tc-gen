@@ -191,6 +191,17 @@ get_tx_offloads () {
     fi
 }
 
+get_rx_offloads () {
+    # Takes rate in kbit/s as parameter
+    local RATE=$1
+
+    if [[ ${RATE} -lt 40000 ]]; then
+        echo "gro off"
+    else
+        echo "gro on"
+    fi
+}
+
 get_limit () {
     # Takes rate in kbit/s as parameter
     local RATE=$1
@@ -314,6 +325,9 @@ apply_egress_shaping () {
 }
 
 apply_ingress_shaping () {
+    # Disable gro for lower bandwiths
+    ${ETHTOOL} --offload ${IF_NAME} $(get_rx_offloads ${DOWN_RATE})
+
     # Create ingress on interface
     ${TC} qdisc add dev ${IF_NAME} handle ffff: ingress
 
