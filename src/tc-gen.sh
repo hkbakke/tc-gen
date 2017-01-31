@@ -29,8 +29,11 @@ tc-gen.sh -i IF_NAME [OPTIONS]
         configuration on the interface is displayed.
 
 OPTIONS
-    -u UP_RATE_MBITS
-    -d DOWN_RATE_MBITS
+    Valid units for rates are k (kbit/s) and M (Mbit/s). If no unit are given
+    with the rate Mbit/s is used.
+
+    -u UP_RATE
+    -d DOWN_RATE
     -f IFB_IF_NAME
         If ingress shaping should be used instead of policing define a valid
         ifb interface. Normally ifb0 and ifb1 are available if nothing is
@@ -44,18 +47,18 @@ OPTIONS
         class has a priority of 4. If this is not set all the bandwith is
         given to the default class which is sufficient for most use cases.
         These classes are only used for egress shaping.
-        If ceil is not set it will default to UP_RATE_MBITS. If prio is not
+        If ceil is not set it will default to UP_RATE. If prio is not
         set, it will default to the same priority as the default class.
 
         Example:
-            -c "107:50::,109:30:70:2"
+            -c "107:50::,109:1400k:7M:2"
 
         The example above creates a leaf class which get all egress traffic
         with fw mark 107, shaped to a rate of 50 mbit/s with no ceiling and
         priority, which means that it may use all the available bandwith if
         available in the root class and has the same priority as the default
-        class. The next leaf class has a fw mark of 109, a rate of 30 mbit/s,
-        a ceil of 70 mbit/s and a priority of 2.
+        class. The next leaf class has a fw mark of 109, a rate of 1400 kbit/s,
+        a ceil of 7 mbit/s and a priority of 2.
     -x
         Clear all traffic control config on interface.
     -V
@@ -68,8 +71,8 @@ EXAMPLES OF COMMON USE
     Shape egress to 5 mbit/s and ingress to 10 mbit/s using IFB-interface
         tc-gen.sh -i eth0 -u 5 -d 10 -f ifb0
 
-    Shape egress to 2 mbit/s and police ingress to 20 mbit/s
-        tc-gen.sh -i eth0 -u 2 -d 20
+    Shape egress to 1500 kbit/s and police ingress to 20 mbit/s
+        tc-gen.sh -i eth0 -u 1500k -d 20M
 
     Display current configuration
         tc-gen.sh -i eth0
@@ -82,16 +85,16 @@ EXAMPLES OF COMMON USE
     policing with good results.
 
 EGRESS TRAFFIC SHAPING
-    UP_RATE_MBITS uses HTB and fq_codel to efficiently shape upload
+    UP_RATE uses HTB and fq_codel to efficiently shape upload
     traffic.
 
 INGRESS TRAFFIC SHAPING
-    If DOWN_RATE_MBITS and IFB_IF_NAME is set, ingress traffic shaping using
+    If DOWN_RATE and IFB_IF_NAME is set, ingress traffic shaping using
     an IFB-interface, HTB and fq_codel, is used for incoming traffic.
 
 INGRESS TRAFFIC POLICING
     BURST_SIZE is only used for ingress policing.
-    Ingress policing is used if IFB_IF_NAME is not defined and DOWN_RATE_MBITS
+    Ingress policing is used if IFB_IF_NAME is not defined and DOWN_RATE
     is set. A good starting point for the burst size is
 
         phy_line_rate_in_bps * burst_time_seconds / 8 = burst_size_in_bytes
@@ -126,11 +129,11 @@ print_version () {
 }
 
 get_htb_quantum () {
-    # Takes input rate in mbit/s as parameter
+    # Takes input rate in kbit/s as parameter
     local RATE=$1
     local QUANTUM=8000
 
-    if [[ ${RATE} -lt 40 ]]; then
+    if [[ ${RATE} -lt 40000 ]]; then
         QUANTUM=1514
     fi
 
@@ -138,10 +141,10 @@ get_htb_quantum () {
 }
 
 get_target () {
-    # Takes input rate in mbit/s and mtu as parameter
+    # Takes input rate in kbit/s and mtu as parameter
     local RATE=$1
     local MTU=$2
-    local KBYTES=$(( ${RATE} * 1000 / 8 ))
+    local KBYTES=$(( ${RATE} / 8 ))
     local MS=$(( ${MTU} / ${KBYTES} ))
     local TARGET=5
 
@@ -153,19 +156,19 @@ get_target () {
 }
 
 get_fq_codel_quantum () {
-    # Takes input rate in mbit/s as parameter
+    # Takes input rate in kbit/s as parameter
     local RATE=$1
 
-    if [[ ${RATE} -lt 100 ]]; then
+    if [[ ${RATE} -lt 100000 ]]; then
         echo "quantum 300"
     fi
 }
 
 get_ecn () {
-    # Takes input rate in mbit/s as parameter
+    # Takes input rate in kbit/s as parameter
     local RATE=$1
 
-    if [[ ${RATE} -ge 4 ]]; then
+    if [[ ${RATE} -ge 4000 ]]; then
         echo "ecn"
     else
         echo "noecn"
@@ -178,10 +181,10 @@ get_mtu () {
 }
 
 get_tx_offloads () {
-    # Takes rate in mbit/s as parameter
+    # Takes rate in kbit/s as parameter
     local RATE=$1
 
-    if [[ ${RATE} -lt 40 ]]; then
+    if [[ ${RATE} -lt 40000 ]]; then
         echo "tso off gso off"
     else
         echo "tso on gso on"
@@ -189,15 +192,15 @@ get_tx_offloads () {
 }
 
 get_limit () {
-    # Takes rate in mbit/s as parameter
+    # Takes rate in kbit/s as parameter
     local RATE=$1
     local LIMIT=10000
 
-    if [[ ${RATE} -le 10 ]]; then
+    if [[ ${RATE} -le 10000 ]]; then
         LIMIT=600
-    elif [[ ${RATE} -le 100 ]]; then
+    elif [[ ${RATE} -le 100000 ]]; then
         LIMIT=800
-    elif [[ ${RATE} -le 1000 ]]; then
+    elif [[ ${RATE} -le 1000000 ]]; then
         LIMIT=1200
     fi
 
@@ -240,7 +243,7 @@ apply_egress_shaping () {
 
     # Set the overall shaped rate of the interface
     ${TC} class add dev ${IF_NAME} parent 1: classid 1:1 htb \
-        rate ${UP_RATE}mbit \
+        rate ${UP_RATE}kbit \
         quantum $(get_htb_quantum ${UP_RATE})
 
     local DEFAULT_RATE=${UP_RATE}
@@ -252,8 +255,8 @@ apply_egress_shaping () {
         for CLASS in ${CLASSES[@]}; do
             local CONFIG=( $(echo "${CLASS}" | tr ':' ' ') )
             local FWMARK=${CONFIG[0]}
-            local CLASS_RATE=${CONFIG[1]}
-            local CEIL_RATE=${CONFIG[2]}
+            local CLASS_RATE=$(convert_rate ${CONFIG[1]})
+            local CEIL_RATE=$(convert_rate ${CONFIG[2]})
             local PRIO=${CONFIG[3]}
             local CLASS_ID=${FWMARK}
 
@@ -278,7 +281,7 @@ apply_egress_shaping () {
             fi
 
             ${TC} class add dev ${IF_NAME} parent 1:1 classid 1:${CLASS_ID} htb \
-                rate ${CLASS_RATE}mbit ceil ${CEIL_RATE}mbit \
+                rate ${CLASS_RATE}kbit ceil ${CEIL_RATE}kbit \
                 prio ${PRIO} quantum $(get_htb_quantum ${CLASS_RATE})
 
             # Should the class rate or ceil be used for the calculations here??
@@ -297,8 +300,9 @@ apply_egress_shaping () {
     fi
 
     # Create class for the default priority
-    ${TC} class add dev ${IF_NAME} parent 1:1 classid 1:99 htb rate ${DEFAULT_RATE}mbit \
-        ceil ${UP_RATE}mbit prio ${DEFAULT_PRIO} \
+    ${TC} class add dev ${IF_NAME} parent 1:1 classid 1:99 htb \
+        rate ${DEFAULT_RATE}kbit \
+        ceil ${UP_RATE}kbit prio ${DEFAULT_PRIO} \
         quantum $(get_htb_quantum ${UP_RATE})
 
     # Set qdisc to fq_codel
@@ -321,11 +325,13 @@ apply_ingress_shaping () {
     ${TC} qdisc add dev ${IFB_IF_NAME} root handle 1: htb default 99
 
     # Set the overall shaped rate of the interface
-    ${TC} class add dev ${IFB_IF_NAME} parent 1: classid 1:1 htb rate ${DOWN_RATE}mbit
+    ${TC} class add dev ${IFB_IF_NAME} parent 1: classid 1:1 htb \
+        rate ${DOWN_RATE}kbit
 
     # Create class for the default priority
-    ${TC} class add dev ${IFB_IF_NAME} parent 1:1 classid 1:99 htb rate ${DOWN_RATE}mbit \
-        ceil ${DOWN_RATE}mbit prio 0 \
+    ${TC} class add dev ${IFB_IF_NAME} parent 1:1 classid 1:99 htb \
+        rate ${DOWN_RATE}kbit \
+        ceil ${DOWN_RATE}kbit prio 0 \
         quantum $(get_htb_quantum ${DOWN_RATE})
 
     # Set qdisc to fq_codel. Enabling ECN is recommended for ingress
@@ -362,23 +368,45 @@ apply_ingress_policing () {
     # filters earlier in the chain.
     ${TC} filter add dev ${IF_NAME} parent ffff: protocol all prio 99 u32 \
         match u32 0 0 \
-        police rate ${DOWN_RATE}mbit \
+        police rate ${DOWN_RATE}kbit \
         burst ${BURST_SIZE} \
         mtu ${MTU} drop flowid :1
 }
 
+convert_rate () {
+    # Takes command line input rate as argument.
+    # Converts rates to kbit/s.
+    local IN_RATE=$1
+    local RATE=0
+    local DEFAULT_REGEX="^([0-9]+)$"
+    local KBIT_REGEX="^([0-9]+)k$"
+    local MBIT_REGEX="^([0-9]+)M$"
 
-# All rates should be given in mbit/s
+    if [[ ${IN_RATE} =~ ${MBIT_REGEX} ]]; then
+        RATE=$(( ${BASH_REMATCH[1]} * 1000 ))
+    elif [[ ${IN_RATE} =~ ${KBIT_REGEX} ]]; then
+        RATE=${BASH_REMATCH[1]}
+    elif [[ ${IN_RATE} =~ ${DEFAULT_REGEX} ]]; then
+        RATE=$(( ${BASH_REMATCH[1]} * 1000 ))
+    else
+        echo "${IN_RATE} is not a valid rate"
+        false
+    fi
+
+    echo ${RATE}
+}
+
+
 while getopts ":i:u:d:b:f:q:c:xV" OPT; do
     case ${OPT} in
         i)
             IF_NAME="${OPTARG}"
             ;;
         u)
-            UP_RATE="${OPTARG}"
+            UP_RATE=$(convert_rate ${OPTARG})
             ;;
         d)
-            DOWN_RATE="${OPTARG}"
+            DOWN_RATE=$(convert_rate ${OPTARG})
             ;;
         b)
             BURST_SIZE="${OPTARG}"
