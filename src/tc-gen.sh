@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-VERSION="1.1.4"
+VERSION="1.1.5"
 TC=$(which tc)
 ETHTOOL=$(which ethtool)
 IP=$(which ip)
@@ -226,7 +226,8 @@ clear_all () {
         ${TC} qdisc del dev ${IFB_IF_NAME} root > /dev/null 2>&1 || true
     fi
 
-    ${ETHTOOL} --offload ${IF_NAME} gro on tso on gso on
+    ${ETHTOOL} --offload ${IF_NAME} gro on tso on gso on \
+        > /dev/null 2>&1 || true
 }
 
 print_config () {
@@ -247,7 +248,8 @@ print_config () {
 
 apply_egress_shaping () {
     # Disable tso and gso for lower bandwiths
-    ${ETHTOOL} --offload ${IF_NAME} $(get_tx_offloads ${UP_RATE})
+    ${ETHTOOL} --offload ${IF_NAME} $(get_tx_offloads ${UP_RATE}) \
+        > /dev/null 2>&1 || true
 
     # Add root handle and set default leaf
     ${TC} qdisc add dev ${IF_NAME} root handle 1: htb default 99
@@ -326,7 +328,8 @@ apply_egress_shaping () {
 
 apply_ingress_shaping () {
     # Disable gro for lower bandwiths
-    ${ETHTOOL} --offload ${IF_NAME} $(get_rx_offloads ${DOWN_RATE})
+    ${ETHTOOL} --offload ${IF_NAME} $(get_rx_offloads ${DOWN_RATE}) \
+        > /dev/null 2>&1 || true
 
     # Create ingress on interface
     ${TC} qdisc add dev ${IF_NAME} handle ffff: ingress
@@ -367,7 +370,8 @@ apply_ingress_policing () {
     # disabled for the interface. Note that for bonds and VLAN interfaces
     # you have to disable gro for the actual physical NICs manually. This
     # greatly increases CPU-usage in most systems for higher bandwiths.
-    ${ETHTOOL} --offload ${IF_NAME} gro off
+    ${ETHTOOL} --offload ${IF_NAME} gro off \
+        > /dev/null 2>&1 || true
 
     # Create ingress on interface
     ${TC} qdisc add dev ${IF_NAME} handle ffff: ingress
