@@ -2,10 +2,10 @@
 
 
 VERSION="1.1.5"
-TC=$(which tc)
-ETHTOOL=$(which ethtool)
-IP=$(which ip)
-MODPROBE=$(which modprobe)
+TC=$(command -v tc)
+ETHTOOL=$(command -v ethtool)
+IP=$(command -v ip)
+MODPROBE=$(command -v modprobe)
 
 
 error_handler () {
