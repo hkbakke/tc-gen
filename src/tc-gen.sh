@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-VERSION="1.1.5"
+VERSION="1.1.6"
 TC=$(command -v tc)
 ETHTOOL=$(command -v ethtool)
 IP=$(command -v ip)
