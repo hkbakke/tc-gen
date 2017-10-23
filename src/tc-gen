@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-VERSION="1.1.6"
+VERSION="1.2.0"
 TC=$(command -v tc)
 ETHTOOL=$(command -v ethtool)
 IP=$(command -v ip)
@@ -22,7 +22,7 @@ set -o errtrace -o pipefail
 
 print_usage () {
     cat << EOF
-tc-gen.sh -i IF_NAME [OPTIONS]
+tc-gen -i IF_NAME [OPTIONS]
 
     -i IF_NAME
         If this is the only option, the current filter, qdisc and class
@@ -66,19 +66,19 @@ OPTIONS
 
 EXAMPLES OF COMMON USE
     Shape egress to 25 mbit/s
-        tc-gen.sh -i eth0 -u 25
+        tc-gen -i eth0 -u 25
 
     Shape egress to 5 mbit/s and ingress to 10 mbit/s using IFB-interface
-        tc-gen.sh -i eth0 -u 5 -d 10 -f ifb0
+        tc-gen -i eth0 -u 5 -d 10 -f ifb0
 
     Shape egress to 1500 kbit/s and police ingress to 20 mbit/s
-        tc-gen.sh -i eth0 -u 1500k -d 20M
+        tc-gen -i eth0 -u 1500k -d 20M
 
     Display current configuration
-        tc-gen.sh -i eth0
+        tc-gen -i eth0
 
     Remove configuration
-        tc-gen.sh -i eth0 -x
+        tc-gen -i eth0 -x
 
     Always use ingress shaping vs policing if you want the best results. An
     additional bonus is that GRO normally can be left on when not using
@@ -125,7 +125,7 @@ EOF
 }
 
 print_version () {
-    echo "tc-gen.sh v${VERSION}"
+    echo "tc-gen v${VERSION}"
 }
 
 get_htb_quantum () {
