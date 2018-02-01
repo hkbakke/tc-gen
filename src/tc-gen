@@ -59,7 +59,7 @@ OPTIONS
         class. The next leaf class has a fw mark of 109, a rate of 1400 kbit/s,
         a ceil of 7 mbit/s and a priority of 2.
     -C "<fwmark>:<rate>:<ceil>:<prio>,<fwmark2>:<rate2>:<ceil2>:<prio2>,..."
-        Same as `-c` but for ingress on IFB interface.
+        Same as -c but for ingress on IFB interface.
     -x
         Clear all traffic control config on interface.
     -V
