@@ -43,12 +43,11 @@ OPTIONS
         ignored.
     -c "<fwmark>:<rate>:<ceil>:<prio>,<fwmark2>:<rate2>:<ceil2>:<prio2>,..."
         Define extra leaf classes if you want to slice up and guarantee
-        bandwith between different kinds of traffic using fw marks. The default
-        class has a priority of 4. If this is not set all the bandwith is
-        given to the default class which is sufficient for most use cases.
-        These classes are only used for egress shaping.
-        If ceil is not set it will default to UP_RATE. If prio is not
-        set, it will default to the same priority as the default class.
+        bandwith between different kinds of traffic using fw marks on egress.
+        The default class has a priority of 4. If this is not set all the
+        bandwith is given to the default class which is sufficient for most
+        use cases. If ceil is not set it will default to UP_RATE. If prio is
+        not set, it will default to the same priority as the default class.
 
         Example:
             -c "107:50::,109:1400k:7M:2"
@@ -59,6 +58,8 @@ OPTIONS
         available in the root class and has the same priority as the default
         class. The next leaf class has a fw mark of 109, a rate of 1400 kbit/s,
         a ceil of 7 mbit/s and a priority of 2.
+    -C "<fwmark>:<rate>:<ceil>:<prio>,<fwmark2>:<rate2>:<ceil2>:<prio2>,..."
+        Same as `-c` but for ingress on IFB interface.
     -x
         Clear all traffic control config on interface.
     -V
@@ -265,7 +266,7 @@ add_prio_classes () {
         [[ -n ${CONFIG[3]} ]] && PRIO=${CONFIG[3]}
 
         if [[ ${CEIL_RATE} -gt ${MAX_RATE} ]]; then
-            echo "ERROR: ceiling value should not be larger than total max rate"
+            >&2 echo "ERROR: ceiling value should not be larger than total max rate"
             exit 1
         fi
 
@@ -354,10 +355,21 @@ apply_ingress_shaping () {
     ${TC} class add dev ${IFB_IF_NAME} parent 1: classid 1:1 htb \
         rate ${DOWN_RATE}kbit
 
+    local DEFAULT_RATE=${DOWN_RATE}
+    local DEFAULT_PRIO=4
+
+    if [[ -n ${IFB_CLASS_CONFIG} ]]; then
+        add_prio_classes \
+            ${IFB_IF_NAME} \
+            "${IFB_CLASS_CONFIG}" \
+            ${DOWN_RATE} \
+            ${DEFAULT_PRIO}
+    fi
+
     # Create class for the default priority
     ${TC} class add dev ${IFB_IF_NAME} parent 1:1 classid 1:99 htb \
-        rate ${DOWN_RATE}kbit \
-        ceil ${DOWN_RATE}kbit prio 0 \
+        rate ${DEFAULT_RATE}kbit \
+        ceil ${DOWN_RATE}kbit prio ${DEFAULT_PRIO} \
         quantum $(get_htb_quantum ${DOWN_RATE})
 
     # Set qdisc to fq_codel. Enabling ECN is recommended for ingress
@@ -424,7 +436,7 @@ convert_rate () {
 }
 
 
-while getopts ":i:u:d:b:f:q:c:xV" OPT; do
+while getopts ":i:u:d:b:f:q:c:C:xV" OPT; do
     case ${OPT} in
         i)
             IF_NAME="${OPTARG}"
@@ -444,6 +456,9 @@ while getopts ":i:u:d:b:f:q:c:xV" OPT; do
         c)
             CLASS_CONFIG="${OPTARG}"
             ;;
+        C)
+            IFB_CLASS_CONFIG="${OPTARG}"
+            ;;
         x)
             CLEAR_CONFIG=1
             ;;
@@ -460,6 +475,11 @@ done
 
 if [[ -z ${IF_NAME} ]]; then
     print_usage
+    exit 1
+fi
+
+if [[ -n ${IFB_CLASS_CONFIG} && -z ${IFB_IF_NAME} ]]; then
+    >&2 echo "ERROR: you must define an IFB interface to use IFB priority classes"
     exit 1
 fi
 
