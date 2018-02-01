@@ -246,6 +246,57 @@ print_config () {
     echo ""
 }
 
+add_prio_classes () {
+    local IF_NAME=$1
+    local CLASS_CONFIG=$2
+    local MAX_RATE=$3
+    local DEFAULT_PRIO=$4
+    local CLASSES=( $(echo "${CLASS_CONFIG}" | tr ',' ' ') )
+
+    for CLASS in ${CLASSES[@]}; do
+        local CONFIG=( $(echo "${CLASS}" | tr ':' ' ') )
+        local FWMARK=${CONFIG[0]}
+        local CLASS_RATE=$(convert_rate ${CONFIG[1]})
+        local CEIL_RATE=${MAX_RATE}
+        local PRIO=${DEFAULT_PRIO}
+        local CLASS_ID=${FWMARK}
+
+        [[ -n ${CONFIG[2]} ]] && CEIL_RATE=$(convert_rate ${CONFIG[2]})
+        [[ -n ${CONFIG[3]} ]] && PRIO=${CONFIG[3]}
+
+        if [[ ${CEIL_RATE} -gt ${MAX_RATE} ]]; then
+            echo "ERROR: ceiling value should not be larger than total max rate"
+            exit 1
+        fi
+
+        # Reduce the leftover default rate accordingly for each class' guaranteed rate
+        # This is used by the calling code, so ensure DEFAULT_RATE is defined there.
+        DEFAULT_RATE=$(( ${DEFAULT_RATE} - ${CLASS_RATE} ))
+
+        if [[ ${DEFAULT_RATE} -le 0 ]]; then
+            echo "ERROR: The aggregated guaranteed rate of the classes needs to be less than the total up rate to leave some room for the default class"
+            exit 1
+        fi
+
+        ${TC} class add dev ${IF_NAME} parent 1:1 classid 1:${CLASS_ID} htb \
+            rate ${CLASS_RATE}kbit ceil ${CEIL_RATE}kbit \
+            prio ${PRIO} quantum $(get_htb_quantum ${CLASS_RATE})
+
+        # Should the class rate or ceil be used for the calculations here??
+        # Using ceil as this is probably the rate it is most often running
+        # at.
+        ${TC} qdisc replace dev ${IF_NAME} parent 1:${CLASS_ID} \
+            handle ${CLASS_ID}: fq_codel \
+            limit $(get_limit ${CEIL_RATE}) \
+            target $(get_target ${CEIL_RATE} $(get_mtu ${IF_NAME})) \
+            $(get_fq_codel_quantum ${CEIL_RATE}) \
+            $(get_ecn ${CEIL_RATE})
+
+        ${TC} filter add dev ${IF_NAME} parent 1: protocol all \
+            handle ${FWMARK} fw classid 1:${CLASS_ID}
+    done
+}
+
 apply_egress_shaping () {
     # Disable tso and gso for lower bandwiths
     ${ETHTOOL} --offload ${IF_NAME} $(get_tx_offloads ${UP_RATE}) \
@@ -263,53 +314,11 @@ apply_egress_shaping () {
     local DEFAULT_PRIO=4
 
     if [[ -n ${CLASS_CONFIG} ]]; then
-        local CLASSES=( $(echo "${CLASS_CONFIG}" | tr ',' ' ') )
-
-        for CLASS in ${CLASSES[@]}; do
-            local CONFIG=( $(echo "${CLASS}" | tr ':' ' ') )
-            local FWMARK=${CONFIG[0]}
-            local CLASS_RATE=$(convert_rate ${CONFIG[1]})
-            local CEIL_RATE=$(convert_rate ${CONFIG[2]})
-            local PRIO=${CONFIG[3]}
-            local CLASS_ID=${FWMARK}
-
-            if [[ -z ${CEIL_RATE} ]]; then
-                CEIL_RATE=${UP_RATE}
-            fi
-
-            if [[ -z ${PRIO} ]]; then
-                PRIO=${DEFAULT_PRIO}
-            fi
-
-            if [[ ${CEIL_RATE} -gt ${UP_RATE} ]]; then
-                echo "ERROR: ceiling value should not be larger than total up rate"
-                exit 1
-            fi
-
-            DEFAULT_RATE=$(( ${DEFAULT_RATE} - ${CLASS_RATE} ))
-
-            if [[ ${DEFAULT_RATE} -le 0 ]]; then
-                echo "ERROR: The aggregated guaranteed rate of the classes needs to be less than the total up rate to leave some room for the default class"
-                exit 1
-            fi
-
-            ${TC} class add dev ${IF_NAME} parent 1:1 classid 1:${CLASS_ID} htb \
-                rate ${CLASS_RATE}kbit ceil ${CEIL_RATE}kbit \
-                prio ${PRIO} quantum $(get_htb_quantum ${CLASS_RATE})
-
-            # Should the class rate or ceil be used for the calculations here??
-            # Using ceil as this is probably the rate it is most often running
-            # at.
-            ${TC} qdisc replace dev ${IF_NAME} parent 1:${CLASS_ID} \
-                handle ${CLASS_ID}: fq_codel \
-                limit $(get_limit ${CEIL_RATE}) \
-                target $(get_target ${CEIL_RATE} $(get_mtu ${IF_NAME})) \
-                $(get_fq_codel_quantum ${CEIL_RATE}) \
-                $(get_ecn ${CEIL_RATE})
-
-            ${TC} filter add dev ${IF_NAME} parent 1: protocol all \
-                handle ${FWMARK} fw classid 1:${CLASS_ID}
-        done
+        add_prio_classes \
+            ${IF_NAME} \
+            "${CLASS_CONFIG}" \
+            ${UP_RATE} \
+            ${DEFAULT_PRIO}
     fi
 
     # Create class for the default priority
