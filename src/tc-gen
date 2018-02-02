@@ -168,8 +168,11 @@ get_fq_codel_quantum () {
 get_ecn () {
     # Takes input rate in kbit/s as parameter
     local RATE=$1
+    local ECN_MINRATE=$2
 
-    if [[ ${RATE} -ge 4000 ]]; then
+    [[ -n ${ECN_MINRATE} ]] || ECN_MINRATE=4000
+
+    if [[ ${RATE} -ge ${ECN_MINRATE} ]]; then
         echo "ecn"
     else
         echo "noecn"
@@ -251,51 +254,80 @@ add_prio_classes () {
     local IF_NAME=$1
     local CLASS_CONFIG=$2
     local MAX_RATE=$3
-    local DEFAULT_PRIO=$4
-    local CLASSES=( $(echo "${CLASS_CONFIG}" | tr ',' ' ') )
+    local ECN_MINRATE=$4
 
-    for CLASS in ${CLASSES[@]}; do
-        local CONFIG=( $(echo "${CLASS}" | tr ':' ' ') )
-        local FWMARK=${CONFIG[0]}
-        local CLASS_RATE=$(convert_rate ${CONFIG[1]})
-        local CEIL_RATE=${MAX_RATE}
-        local PRIO=${DEFAULT_PRIO}
-        local CLASS_ID=${FWMARK}
+    # Default values
+    local DEFAULT_CLASS=99
+    local DEFAULT_RATE=${MAX_RATE}
+    local DEFAULT_PRIO=4
 
-        [[ -n ${CONFIG[2]} ]] && CEIL_RATE=$(convert_rate ${CONFIG[2]})
-        [[ -n ${CONFIG[3]} ]] && PRIO=${CONFIG[3]}
+    # Add root handle and set default leaf
+    ${TC} qdisc add dev ${IF_NAME} root handle 1: htb default ${DEFAULT_CLASS}
 
-        if [[ ${CEIL_RATE} -gt ${MAX_RATE} ]]; then
-            >&2 echo "ERROR: ceiling value should not be larger than total max rate"
-            exit 1
-        fi
+    # Set the overall shaped rate of the interface
+    ${TC} class add dev ${IF_NAME} parent 1: classid 1:1 htb \
+        rate ${MAX_RATE}kbit \
+        quantum $(get_htb_quantum ${MAX_RATE})
 
-        # Reduce the leftover default rate accordingly for each class' guaranteed rate
-        # This is used by the calling code, so ensure DEFAULT_RATE is defined there.
-        DEFAULT_RATE=$(( ${DEFAULT_RATE} - ${CLASS_RATE} ))
+    if [[ -n ${CLASS_CONFIG} ]]; then
+        local CLASSES=( $(echo "${CLASS_CONFIG}" | tr ',' ' ') )
 
-        if [[ ${DEFAULT_RATE} -le 0 ]]; then
-            echo "ERROR: The aggregated guaranteed rate of the classes needs to be less than the total up rate to leave some room for the default class"
-            exit 1
-        fi
+        for CLASS in ${CLASSES[@]}; do
+            local CONFIG=( $(echo "${CLASS}" | tr ':' ' ') )
+            local FWMARK=${CONFIG[0]}
+            local CLASS_RATE=$(convert_rate ${CONFIG[1]})
+            local CEIL_RATE=${MAX_RATE}
+            local PRIO=${DEFAULT_PRIO}
+            local CLASS_ID=${FWMARK}
 
-        ${TC} class add dev ${IF_NAME} parent 1:1 classid 1:${CLASS_ID} htb \
-            rate ${CLASS_RATE}kbit ceil ${CEIL_RATE}kbit \
-            prio ${PRIO} quantum $(get_htb_quantum ${CLASS_RATE})
+            [[ -n ${CONFIG[2]} ]] && CEIL_RATE=$(convert_rate ${CONFIG[2]})
+            [[ -n ${CONFIG[3]} ]] && PRIO=${CONFIG[3]}
 
-        # Should the class rate or ceil be used for the calculations here??
-        # Using ceil as this is probably the rate it is most often running
-        # at.
-        ${TC} qdisc replace dev ${IF_NAME} parent 1:${CLASS_ID} \
-            handle ${CLASS_ID}: fq_codel \
-            limit $(get_limit ${CEIL_RATE}) \
-            target $(get_target ${CEIL_RATE} $(get_mtu ${IF_NAME})) \
-            $(get_fq_codel_quantum ${CEIL_RATE}) \
-            $(get_ecn ${CEIL_RATE})
+            if [[ ${CEIL_RATE} -gt ${MAX_RATE} ]]; then
+                >&2 echo "ERROR: ceiling value should not be larger than total max rate"
+                exit 1
+            fi
 
-        ${TC} filter add dev ${IF_NAME} parent 1: protocol all \
-            handle ${FWMARK} fw classid 1:${CLASS_ID}
-    done
+            # Reduce the leftover default rate accordingly for each class' guaranteed rate
+            # This is used by the calling code, so ensure DEFAULT_RATE is defined there.
+            DEFAULT_RATE=$(( ${DEFAULT_RATE} - ${CLASS_RATE} ))
+
+            if [[ ${DEFAULT_RATE} -le 0 ]]; then
+                echo "ERROR: The aggregated guaranteed rate of the classes needs to be less than the total up rate to leave some room for the default class"
+                exit 1
+            fi
+
+            ${TC} class add dev ${IF_NAME} parent 1:1 classid 1:${CLASS_ID} htb \
+                rate ${CLASS_RATE}kbit ceil ${CEIL_RATE}kbit \
+                prio ${PRIO} quantum $(get_htb_quantum ${CLASS_RATE})
+
+            # Should the class rate or ceil be used for the calculations here??
+            # Using ceil as this is probably the rate it is most often running
+            # at.
+            ${TC} qdisc replace dev ${IF_NAME} parent 1:${CLASS_ID} \
+                handle ${CLASS_ID}: fq_codel \
+                limit $(get_limit ${CEIL_RATE}) \
+                target $(get_target ${CEIL_RATE} $(get_mtu ${IF_NAME})) \
+                $(get_fq_codel_quantum ${CEIL_RATE}) \
+                $(get_ecn ${CEIL_RATE} ${ECN_MINRATE})
+
+            ${TC} filter add dev ${IF_NAME} parent 1: protocol all \
+                handle ${FWMARK} fw classid 1:${CLASS_ID}
+        done
+    fi
+
+    # Create class for the default priority
+    ${TC} class add dev ${IF_NAME} parent 1:1 classid 1:${DEFAULT_CLASS} htb \
+        rate ${DEFAULT_RATE}kbit \
+        ceil ${MAX_RATE}kbit prio ${DEFAULT_PRIO} \
+        quantum $(get_htb_quantum ${MAX_RATE})
+
+    # Set qdisc to fq_codel
+    ${TC} qdisc replace dev ${IF_NAME} parent 1:${DEFAULT_CLASS} handle ${DEFAULT_CLASS}: fq_codel \
+        limit $(get_limit ${MAX_RATE}) \
+        target $(get_target ${MAX_RATE} $(get_mtu ${IF_NAME})) \
+        $(get_fq_codel_quantum ${MAX_RATE}) \
+        $(get_ecn ${MAX_RATE} ${ECN_MINRATE})
 }
 
 apply_egress_shaping () {
@@ -303,37 +335,10 @@ apply_egress_shaping () {
     ${ETHTOOL} --offload ${IF_NAME} $(get_tx_offloads ${UP_RATE}) \
         > /dev/null 2>&1 || true
 
-    # Add root handle and set default leaf
-    ${TC} qdisc add dev ${IF_NAME} root handle 1: htb default 99
-
-    # Set the overall shaped rate of the interface
-    ${TC} class add dev ${IF_NAME} parent 1: classid 1:1 htb \
-        rate ${UP_RATE}kbit \
-        quantum $(get_htb_quantum ${UP_RATE})
-
-    local DEFAULT_RATE=${UP_RATE}
-    local DEFAULT_PRIO=4
-
-    if [[ -n ${CLASS_CONFIG} ]]; then
-        add_prio_classes \
-            ${IF_NAME} \
-            "${CLASS_CONFIG}" \
-            ${UP_RATE} \
-            ${DEFAULT_PRIO}
-    fi
-
-    # Create class for the default priority
-    ${TC} class add dev ${IF_NAME} parent 1:1 classid 1:99 htb \
-        rate ${DEFAULT_RATE}kbit \
-        ceil ${UP_RATE}kbit prio ${DEFAULT_PRIO} \
-        quantum $(get_htb_quantum ${UP_RATE})
-
-    # Set qdisc to fq_codel
-    ${TC} qdisc replace dev ${IF_NAME} parent 1:99 handle 99: fq_codel \
-        limit $(get_limit ${UP_RATE}) \
-        target $(get_target ${UP_RATE} $(get_mtu ${IF_NAME})) \
-        $(get_fq_codel_quantum ${UP_RATE}) \
-        $(get_ecn ${UP_RATE})
+    add_prio_classes \
+        ${IF_NAME} \
+        "${CLASS_CONFIG}" \
+        ${UP_RATE}
 }
 
 apply_ingress_shaping () {
@@ -348,36 +353,12 @@ apply_ingress_shaping () {
     ${MODPROBE} ifb
     ${IP} link set dev ${IFB_IF_NAME} up
 
-    # Add root handle and set default leaf
-    ${TC} qdisc add dev ${IFB_IF_NAME} root handle 1: htb default 99
-
-    # Set the overall shaped rate of the interface
-    ${TC} class add dev ${IFB_IF_NAME} parent 1: classid 1:1 htb \
-        rate ${DOWN_RATE}kbit
-
-    local DEFAULT_RATE=${DOWN_RATE}
-    local DEFAULT_PRIO=4
-
-    if [[ -n ${IFB_CLASS_CONFIG} ]]; then
-        add_prio_classes \
-            ${IFB_IF_NAME} \
-            "${IFB_CLASS_CONFIG}" \
-            ${DOWN_RATE} \
-            ${DEFAULT_PRIO}
-    fi
-
-    # Create class for the default priority
-    ${TC} class add dev ${IFB_IF_NAME} parent 1:1 classid 1:99 htb \
-        rate ${DEFAULT_RATE}kbit \
-        ceil ${DOWN_RATE}kbit prio ${DEFAULT_PRIO} \
-        quantum $(get_htb_quantum ${DOWN_RATE})
-
-    # Set qdisc to fq_codel. Enabling ECN is recommended for ingress
-    ${TC} qdisc replace dev ${IFB_IF_NAME} parent 1:99 handle 99: fq_codel \
-        limit $(get_limit ${DOWN_RATE}) \
-        target $(get_target ${DOWN_RATE} $(get_mtu ${IF_NAME})) \
-        $(get_fq_codel_quantum ${DOWN_RATE}) \
-        ecn
+    # Enabling ECN is recommended for ingress, so ECN_MINRATE is set to 0
+    add_prio_classes \
+        ${IFB_IF_NAME} \
+        "${IFB_CLASS_CONFIG}" \
+        ${DOWN_RATE} \
+        0
 
     # Redirect all ingress traffic to IFB egress. Use prio 99 to make it
     # possible to insert filters earlier in the chain.
