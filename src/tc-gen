@@ -311,8 +311,8 @@ add_prio_classes () {
                 $(get_fq_codel_quantum ${CEIL_RATE}) \
                 $(get_ecn ${CEIL_RATE} ${ECN_MINRATE})
 
-            ${TC} filter add dev ${IF_NAME} parent 1: protocol all \
-                handle ${FWMARK} fw classid 1:${CLASS_ID}
+            ${TC} filter add dev ${IF_NAME} parent 1: protocol all handle ${FWMARK} \
+                fw classid 1:${CLASS_ID}
         done
     fi
 
@@ -362,7 +362,8 @@ apply_ingress_shaping () {
 
     # Redirect all ingress traffic to IFB egress. Use prio 99 to make it
     # possible to insert filters earlier in the chain.
-    ${TC} filter add dev ${IF_NAME} parent ffff: protocol all prio 99 u32 \
+    ${TC} filter add dev ${IF_NAME} parent ffff: protocol all prio 99 \
+        u32 \
         match u32 0 0 \
         action mirred egress redirect dev ${IFB_IF_NAME}
 }
@@ -386,11 +387,11 @@ apply_ingress_policing () {
 
     # Police all ingress traffic. Use prio 99 to make it possible to insert
     # filters earlier in the chain.
-    ${TC} filter add dev ${IF_NAME} parent ffff: protocol all prio 99 u32 \
+    ${TC} filter add dev ${IF_NAME} parent ffff: protocol all prio 99 \
+        u32 \
         match u32 0 0 \
-        police rate ${DOWN_RATE}kbit \
-        burst ${BURST_SIZE} \
-        mtu ${MTU} drop flowid :1
+        police rate ${DOWN_RATE}kbit burst ${BURST_SIZE} mtu ${MTU} drop \
+        flowid :1
 }
 
 convert_rate () {
