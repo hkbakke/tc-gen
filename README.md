@@ -37,7 +37,7 @@ Remove configuration
         up /usr/local/bin/tc-gen -i ${IFACE} -u 10 -d 100 -f ifb0
 
     # Add additional rules to the post-commands file (location can be overridden by -p)
-    echo '${TC} filter add dev ${IF_NAME} parent ffff: protocol ip prio 1 u32 match ip protocol 17 0xff match ip dport 4500 0xffff action pass' >> /etc/tc-gen/post-commands
+    echo '${TC} filter add dev ${IF_NAME} parent ffff: protocol ip prio 1 u32 match ip protocol 17 0xff match ip dport 4500 0xffff action pass' >> /etc/tc-gen/post-commands.bond0.12
 
     # Example with egress shaping on gre-tunnel
     allow-auto gre2
