@@ -32,8 +32,6 @@ OPTIONS
     Valid units for rates are k (kbit/s) and M (Mbit/s). If no unit are given
     with the rate Mbit/s is used.
 
-    -u UP_RATE
-    -d DOWN_RATE
     -f IFB_IF_NAME
         If ingress shaping should be used instead of policing define a valid
         ifb interface. Normally ifb0 and ifb1 are available if nothing is
@@ -41,9 +39,11 @@ OPTIONS
     -b BURST_SIZE
         Only used when ingress policing is used. For ingress shaping this is
         ignored.
-    -c "<fwmark>:<rate>:<ceil>:<prio>,<fwmark2>:<rate2>:<ceil2>:<prio2>,..."
+    -c "<handle>:<rate>:<ceil>:<prio>,<handle2>:<rate2>:<ceil2>:<prio2>,..."
         Define extra leaf classes if you want to slice up and guarantee
-        bandwith between different kinds of traffic using fw marks on egress.
+        bandwith between different kinds of traffic, for exeample by using
+        fw marks on egress. If the fw mark matches the handle the traffic
+        will match.
         The default class has a priority of 4. If this is not set all the
         bandwith is given to the default class which is sufficient for most
         use cases. If ceil is not set it will default to UP_RATE. If prio is
@@ -53,13 +53,37 @@ OPTIONS
             -c "107:50::,109:1400k:7M:2"
 
         The example above creates a leaf class which get all egress traffic
-        with fw mark 107, shaped to a rate of 50 mbit/s with no ceiling and
+        with handle 107, shaped to a rate of 50 mbit/s with no ceiling and
         priority, which means that it may use all the available bandwith if
         available in the root class and has the same priority as the default
-        class. The next leaf class has a fw mark of 109, a rate of 1400 kbit/s,
+        class. The next leaf class has a handle of 109, a rate of 1400 kbit/s,
         a ceil of 7 mbit/s and a priority of 2.
-    -C "<fwmark>:<rate>:<ceil>:<prio>,<fwmark2>:<rate2>:<ceil2>:<prio2>,..."
-        Same as -c but for ingress on IFB interface.
+    -C "<handle>:<rate>:<ceil>:<prio>,<handle2>:<rate2>:<ceil2>:<prio2>,..."
+        Same as -c but for ingress on IFB interface. Note that it is not
+        possible to use fw marks to assign traffic to IFB interface classes,
+        as it is not hooked into netfilter. Instead you need to use tc filter
+        rules, which you normally would add to the post-commands file.
+
+        Example:
+            tc filter add dev ifb0 parent 1: protocol ip prio 20 \
+                u32 \
+                match ip protocol 6 0xff \
+                match ip dport 22 0xffff \
+                classid 1:<handle>
+
+        The example above sends TCP port 22 traffic to the 1:<handle> class.
+        The filter priority is used to define filter processing order, and
+        must not be confused with the class priority, which defines the class'
+        relative priority to other classes when there is a need to prioritize
+        traffic.
+    -d DOWN_RATE
+    -p POST_COMMANDS_FILE
+        Override path to post commands file. By default tc-gen checks if
+        "/etc/tc-gen/post-commands" exists and if so, sources that file after
+        tc-gen have finished setting up its ordinary configuration.
+        Some nice to have environment variables available for that file are
+        TC, IF_NAME, IFB_IF_NAME, UP_RATE, DOWN_RATE and BURST_SIZE
+    -u UP_RATE
     -x
         Clear all traffic control config on interface.
     -V
@@ -274,11 +298,11 @@ add_prio_classes () {
 
         for CLASS in ${CLASSES[@]}; do
             local CONFIG=( $(echo "${CLASS}" | tr ':' ' ') )
-            local FWMARK=${CONFIG[0]}
+            local HANDLE=${CONFIG[0]}
             local CLASS_RATE=$(convert_rate ${CONFIG[1]})
             local CEIL_RATE=${MAX_RATE}
             local PRIO=${DEFAULT_PRIO}
-            local CLASS_ID=${FWMARK}
+            local CLASS_ID=${HANDLE}
 
             [[ -n ${CONFIG[2]} ]] && CEIL_RATE=$(convert_rate ${CONFIG[2]})
             [[ -n ${CONFIG[3]} ]] && PRIO=${CONFIG[3]}
@@ -311,7 +335,7 @@ add_prio_classes () {
                 $(get_fq_codel_quantum ${CEIL_RATE}) \
                 $(get_ecn ${CEIL_RATE} ${ECN_MINRATE})
 
-            ${TC} filter add dev ${IF_NAME} parent 1: protocol all handle ${FWMARK} \
+            ${TC} filter add dev ${IF_NAME} parent 1: protocol all handle ${HANDLE} \
                 fw classid 1:${CLASS_ID}
         done
     fi
@@ -418,7 +442,7 @@ convert_rate () {
 }
 
 
-while getopts ":i:u:d:b:f:q:c:C:xV" OPT; do
+while getopts ":i:u:d:b:f:q:c:C:p:xV" OPT; do
     case ${OPT} in
         i)
             IF_NAME="${OPTARG}"
@@ -440,6 +464,9 @@ while getopts ":i:u:d:b:f:q:c:C:xV" OPT; do
             ;;
         C)
             IFB_CLASS_CONFIG="${OPTARG}"
+            ;;
+        p)
+            POST_COMMANDS="${OPTARG}"
             ;;
         x)
             CLEAR_CONFIG=1
@@ -490,5 +517,8 @@ if [[ -n ${DOWN_RATE} ]]; then
     fi
 fi
 
+# Execute post commands
+[[ -n ${POST_COMMANDS} ]] || POST_COMMANDS="/etc/tc-gen/post-commands"
+[[ -r ${POST_COMMANDS} ]] && . "${POST_COMMANDS}"
 
 trap - ERR INT TERM

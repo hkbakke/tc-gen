@@ -35,7 +35,9 @@ Remove configuration
     allow-auto bond0.12
     iface bond0.12 inet dhcp
         up /usr/local/bin/tc-gen -i ${IFACE} -u 10 -d 100 -f ifb0
-        up /sbin/tc filter add dev ${IFACE} parent ffff: protocol ip prio 1 u32 match ip protocol 17 0xff match ip dport 4500 0xffff action pass
+
+    # Add additional rules to the post-commands file (location can be overridden by -p)
+    echo '${TC} filter add dev ${IF_NAME} parent ffff: protocol ip prio 1 u32 match ip protocol 17 0xff match ip dport 4500 0xffff action pass' >> /etc/tc-gen/post-commands
 
     # Example with egress shaping on gre-tunnel
     allow-auto gre2
