@@ -77,12 +77,15 @@ OPTIONS
         relative priority to other classes when there is a need to prioritize
         traffic.
     -d DOWN_RATE
-    -p POST_COMMANDS_FILE
-        Override path to post commands file. By default tc-gen checks if
-        "/etc/tc-gen/post-commands" exists and if so, sources that file after
-        tc-gen have finished setting up its ordinary configuration.
-        Some nice to have environment variables available for that file are
-        TC, IF_NAME, IFB_IF_NAME, UP_RATE, DOWN_RATE and BURST_SIZE
+    -p CONFIG_DIR
+        By default tc-gen checks if "/etc/tc-gen/post-commands.<if>" exists and
+        if so, sources that file after tc-gen have finished setting up its
+        ordinary configuration. Some nice to have environment variables
+        available for those files are:
+
+            TC, IF_NAME, IFB_IF_NAME, UP_RATE, DOWN_RATE and BURST_SIZE
+
+        Use this option to look in another dir for these files.
     -u UP_RATE
     -x
         Clear all traffic control config on interface.
@@ -443,6 +446,9 @@ convert_rate () {
 }
 
 
+# Defaults
+CONFIG_DIR="/etc/tc-gen"
+
 while getopts ":i:u:d:b:f:q:c:C:p:xV" OPT; do
     case ${OPT} in
         i)
@@ -467,7 +473,7 @@ while getopts ":i:u:d:b:f:q:c:C:p:xV" OPT; do
             IFB_CLASS_CONFIG="${OPTARG}"
             ;;
         p)
-            POST_COMMANDS="${OPTARG}"
+            CONFIG_DIR="${OPTARG}"
             ;;
         x)
             CLEAR_CONFIG=1
@@ -519,7 +525,11 @@ if [[ -n ${DOWN_RATE} ]]; then
 fi
 
 # Execute post commands
-[[ -n ${POST_COMMANDS} ]] || POST_COMMANDS="/etc/tc-gen/post-commands"
-[[ -r ${POST_COMMANDS} ]] && . "${POST_COMMANDS}"
+IF_POST_COMMANDS="${CONFIG_DIR}/post-commands.${IF_NAME}"
+IFB_POST_COMMANDS="${CONFIG_DIR}/post-commands.${IFB_IF_NAME}"
+
+for f in "${IF_POST_COMMANDS}" "${IFB_POST_COMMANDS}"; do
+    [[ -r $f ]] && . "$f"
+done
 
 trap - ERR INT TERM
