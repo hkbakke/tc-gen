@@ -297,7 +297,8 @@ add_prio_classes () {
         local CLASSES=( $(echo "${CLASS_CONFIG}" | tr ',' ' ') )
 
         for CLASS in ${CLASSES[@]}; do
-            local CONFIG=( $(echo "${CLASS}" | tr ':' ' ') )
+            local CONFIG
+            IFS=':' read -r -a CONFIG <<< "${CLASS}"
             local HANDLE=${CONFIG[0]}
             local CLASS_RATE=$(convert_rate ${CONFIG[1]})
             local CEIL_RATE=${MAX_RATE}
