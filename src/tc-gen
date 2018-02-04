@@ -418,8 +418,7 @@ apply_ingress_policing () {
     ${TC} filter add dev ${IF_NAME} parent ffff: protocol all prio 99 \
         u32 \
         match u32 0 0 \
-        police rate ${DOWN_RATE}kbit burst ${BURST_SIZE} mtu ${MTU} drop \
-        flowid :1
+        police rate ${DOWN_RATE}kbit burst ${BURST_SIZE} mtu ${MTU} drop
 }
 
 convert_rate () {
