@@ -129,11 +129,14 @@ INGRESS TRAFFIC POLICING
 
     with a burst_time_seconds value of 0.005s, or 5ms.
 
-    If BURST_SIZE is not set a default burst size of
+    The minimum recommended burst size is
 
         MTU * 10 = burst_size_in_bytes
 
-    is used.
+    tc-gen tries to automatically calculate this for you, but in several
+    cases it is hard to determine the actual physical line rate for the
+    interface, so you may need to set BURST_SIZE manually for optimal
+    results.
 
     Ingress policing is very unreliable unless generic receive offload is
     disabled for the interface. For bonds and VLAN interfaces you have to
@@ -203,6 +206,15 @@ get_ecn () {
         echo "ecn"
     else
         echo "noecn"
+    fi
+}
+
+get_speed () {
+    # Takes interface as parameter
+    if [[ -r /sys/class/net/${1}/speed ]]; then
+        cat /sys/class/net/${1}/speed
+    else
+        echo 0
     fi
 }
 
@@ -408,9 +420,16 @@ apply_ingress_policing () {
     ${TC} qdisc add dev ${IF_NAME} handle ffff: ingress
 
     local MTU=$(get_mtu ${IF_NAME})
+    local PHY_SPEED_MBITS=$(get_speed ${IF_NAME})
+    local BURST_TIME_MS=5
 
     if [[ -z ${BURST_SIZE} ]]; then
-        BURST_SIZE=$(( ${MTU} * 10 ))
+        BURST_SIZE_MIN=$(( ${MTU} * 10 ))
+        BURST_SIZE=$(( ${PHY_SPEED_MBITS} * 1000 * ${BURST_TIME_MS} / 8 ))
+
+        if [[ ${BURST_SIZE} -lt ${BURST_SIZE_MIN} ]]; then
+            BURST_SIZE=${BURST_SIZE_MIN}
+        fi
     fi
 
     # Police all ingress traffic. Use prio 99 to make it possible to insert
