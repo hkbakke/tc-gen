@@ -200,7 +200,7 @@ get_ecn () {
     local RATE=$1
     local ECN_MINRATE=$2
 
-    [[ -n ${ECN_MINRATE} ]] || ECN_MINRATE=4000
+    [[ -n ${ECN_MINRATE} ]] || ECN_MINRATE=0
 
     if [[ ${RATE} -ge ${ECN_MINRATE} ]]; then
         echo "ecn"
@@ -291,9 +291,9 @@ print_config () {
 
 add_prio_classes () {
     local IF_NAME=$1
-    local CLASS_CONFIG=$2
-    local MAX_RATE=$3
-    local ECN_MINRATE=$4
+    local MAX_RATE=$2
+    local ECN_MINRATE=$3
+    local CLASS_CONFIG=$4
 
     # Default values
     local DEFAULT_CLASS=99
@@ -377,8 +377,9 @@ apply_egress_shaping () {
 
     add_prio_classes \
         ${IF_NAME} \
-        "${CLASS_CONFIG}" \
-        ${UP_RATE}
+        ${UP_RATE} \
+        4000 \
+        "${CLASS_CONFIG}"
 }
 
 apply_ingress_shaping () {
@@ -396,9 +397,9 @@ apply_ingress_shaping () {
     # Enabling ECN is recommended for ingress, so ECN_MINRATE is set to 0
     add_prio_classes \
         ${IFB_IF_NAME} \
-        "${IFB_CLASS_CONFIG}" \
         ${DOWN_RATE} \
-        0
+        0 \
+        "${IFB_CLASS_CONFIG}"
 
     # Redirect all ingress traffic to IFB egress. Use prio 99 to make it
     # possible to insert filters earlier in the chain.
