@@ -1,3 +1,11 @@
+# DEPRECATED
+The functionality in this script is targeted towards fq_codel/htb. However, 
+time has passed and today the simpler to use `tc-cake` is the better
+alternative in most cases.
+
+This script will probably still work for a long time, but will not receive any
+updates.
+
 # tc-gen
 tc-gen is a wrapper around all the complexity of modern traffic shaping and
 policing on linux. It tries to use best practices whenever possible while still
